@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CO2 Sensor Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(120deg, #e0eafc, #cfdef3);
+      color: #222;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .dashboard {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 2rem 3rem;
+      margin-top: 2rem;
+      text-align: center;
+      min-width: 320px;
+    }
+    h1 {
+      color: #2a5298;
+      margin-bottom: 1.5rem;
+    }
+    .reading {
+      font-size: 2.5rem;
+      margin: 1rem 0;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+    .label {
+      font-size: 1.1rem;
+      color: #555;
+    }
+    .fan-btn {
+      background: linear-gradient(90deg, #2a5298, #1e3c72);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem 2rem;
+      margin: 0.5rem 1rem;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+      box-shadow: 0 2px 8px rgba(42,82,152,0.08);
+    }
+    .fan-btn:hover {
+      background: linear-gradient(90deg, #1e3c72, #2a5298);
+      transform: translateY(-2px) scale(1.04);
+    }
+    .fan-state {
+      margin-top: 1.5rem;
+      font-size: 1.2rem;
+      color: #2a5298;
+      font-weight: 500;
+    }
+    .footer {
+      margin-top: 2rem;
+      color: #888;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <h1>CO₂ Sensor Dashboard</h1>
+    <div style="margin:2rem 0;">
+      <canvas id="co2gauge" width="220" height="120"></canvas>
+    </div>
+    <div class="reading"><span id="co2">-</span> <span class="label">ppm CO₂</span></div>
+    <div class="reading"><span id="tvoc">-</span> <span class="label">ppb TVOC</span></div>
+    <button class="fan-btn" onclick="fan('on')">Fan ON</button>
+    <button class="fan-btn" onclick="fan('off')">Fan OFF</button>
+    <div class="fan-state">Fan State: <span id="fan">-</span></div>
+  </div>
+  <div class="footer">Arduino CO₂ Sensor &copy; 2026</div>
+  <script>
+    function drawGauge(value) {
+      const canvas = document.getElementById('co2gauge');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Gauge background
+      ctx.beginPath();
+      ctx.arc(110, 110, 90, Math.PI, 2 * Math.PI);
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = '#eee';
+      ctx.stroke();
+      // Gauge arc (color changes if >1000)
+      ctx.beginPath();
+      ctx.arc(110, 110, 90, Math.PI, Math.PI + (value/2000)*Math.PI, false);
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = value > 1000 ? '#e53935' : '#2a5298';
+      ctx.stroke();
+      // Needle
+      const angle = Math.PI + (value/2000)*Math.PI;
+      ctx.save();
+      ctx.translate(110, 110);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.lineTo(0,-80);
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = value > 1000 ? '#e53935' : '#2a5298';
+      ctx.stroke();
+      ctx.restore();
+      // Center circle
+      ctx.beginPath();
+      ctx.arc(110, 110, 12, 0, 2*Math.PI);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // Text
+      ctx.font = '20px Segoe UI';
+      ctx.fillStyle = value > 1000 ? '#e53935' : '#2a5298';
+      ctx.textAlign = 'center';
+      ctx.fillText(value + ' ppm', 110, 70);
+      ctx.font = '14px Segoe UI';
+      ctx.fillStyle = '#888';
+      ctx.fillText('0', 30, 120);
+      ctx.fillText('2000', 190, 120);
+    }
+    function updateData() {
+      fetch('/data').then(r=>r.json()).then(d=>{
+        document.getElementById('co2').textContent = d.co2;
+        document.getElementById('tvoc').textContent = d.tvoc;
+        drawGauge(Number(d.co2) || 0);
+      });
+      fetch('/fan/state').then(r=>r.json()).then(d=>{
+        document.getElementById('fan').textContent = d.fan;
+      });
+    }
+    function fan(state) {
+      fetch('/fan/' + state, {method: 'POST'}).then(updateData);
+    }
+    setInterval(updateData, 2000);
+    updateData();
+    drawGauge(0);
+  </script>
+</body>
+</html>
