@@ -96,7 +96,7 @@
       ctx.beginPath();
       ctx.arc(110, 110, 90, Math.PI, 2 * Math.PI);
       ctx.lineWidth = 20;
-      ctx.strokeStyle = '#eee';
+      ctx.strokeStyle = value > 1000 ? '#ffcccc' : '#eee'; // Light red if >1000
       ctx.stroke();
       // Gauge arc (color changes if >1000)
       ctx.beginPath();
