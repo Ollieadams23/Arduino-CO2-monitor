@@ -1,7 +1,35 @@
+#include <Arduino_LED_Matrix.h>
+#include "font5x5.h"
+// Helper to draw only fan state (centered vertically)
+void drawFanState(ArduinoLEDMatrix &matrix, const char *state) {
+  uint8_t bitmap[8][12] = {0}; // 8 rows x 12 columns
+  int colIdx = 0;
+  const char *text = state;
+  // Center vertically: draw in rows 2-6 (for 5x5 font)
+  int yOffset = 2;
+  while (*text && colIdx <= 8) {
+    char c = *text++;
+    int idx = font5x5_index(c);
+    const uint8_t *glyph = font5x5[idx];
+    for (int col = 0; col < 5 && colIdx < 12; col++, colIdx++) {
+      for (int row = 0; row < 5; row++) {
+        if ((glyph[col] >> row) & 0x01) {
+          bitmap[row + yOffset][colIdx] = 1;
+        }
+      }
+    }
+    colIdx++; // space between chars
+  }
+  matrix.renderBitmap(bitmap, 8, 12);
+}
+
 #include <ArduinoBLE.h>
 
 #include <Adafruit_CCS811.h>
 #include <ArduinoJson.h>
+
+
+
 
 
 
@@ -30,6 +58,13 @@ WiFiClient client;
 BLEService co2Service("180A"); // Custom service UUID
 BLEIntCharacteristic co2Char("2A6E", BLERead | BLENotify); // CO2 ppm
 BLEIntCharacteristic tvocChar("2A6F", BLERead | BLENotify); // TVOC ppb
+
+ArduinoLEDMatrix matrix;
+
+// Add a variable to track fan control mode
+enum FanMode { FAN_AUTO, FAN_MANUAL_ON };
+FanMode fanMode = FAN_AUTO;
+bool fanState = false; // true = ON, false = OFF
 
 void setup() {
   Serial.begin(115200);
@@ -68,17 +103,22 @@ void setup() {
     while(1);
   }
   Serial.println("Sensor ready");
+  matrix.begin();
 }
 
 void loop() {
   static unsigned long lastSend = 0;
   static unsigned long lastFanCheck = 0;
+  static int lastCO2 = 0;
+  int co2ppm = 0;
+  int tvoc = 0;
+  bool fanOn = false;
   if (millis() - lastSend >= 5000) { // Send every 5 seconds
     lastSend = millis();
     if(sensor.available()){
       if(sensor.readData()==false){
-        int co2ppm = sensor.geteCO2();
-        int tvoc = sensor.getTVOC();
+        co2ppm = sensor.geteCO2();
+        tvoc = sensor.getTVOC();
         Serial.print("CO2: "); Serial.print(co2ppm);
         Serial.print(" ppm, TVOC: "); Serial.print(tvoc); Serial.println(" ppb");
         // Update BLE characteristics
@@ -107,6 +147,25 @@ void loop() {
         } else {
           Serial.println("Connection to server failed");
         }
+        // Fan control logic
+        if (fanMode == FAN_MANUAL_ON) {
+          digitalWrite(RELAY_PIN, HIGH);
+          fanState = true;
+        } else { // FAN_AUTO
+          if (fanState) {
+            if (co2ppm < 800) {
+              digitalWrite(RELAY_PIN, LOW);
+              fanState = false;
+            }
+          } else {
+            if (co2ppm > 1000) {
+              digitalWrite(RELAY_PIN, HIGH);
+              fanState = true;
+            }
+          }
+        }
+        updateMatrixDisplay(co2ppm, fanState);
+        lastCO2 = co2ppm;
       } else {
         Serial.println("CCS811 readData failed");
       }
@@ -136,11 +195,9 @@ void loop() {
         int onIdx = response.indexOf("on", idx);
         int offIdx = response.indexOf("off", idx);
         if (onIdx != -1 && (offIdx == -1 || onIdx < offIdx)) {
-          digitalWrite(RELAY_PIN, HIGH);
-          Serial.println("Fan set to ON by server");
+          fanMode = FAN_MANUAL_ON;
         } else if (offIdx != -1) {
-          digitalWrite(RELAY_PIN, LOW);
-          Serial.println("Fan set to OFF by server");
+          fanMode = FAN_AUTO;
         }
       }
     } else {
@@ -148,4 +205,8 @@ void loop() {
     }
   }
   BLE.poll();
+}
+
+void updateMatrixDisplay(int co2ppm, bool fanOn) {
+  drawFanState(matrix, fanOn ? "ON" : "OFF");
 }
