@@ -1,3 +1,5 @@
+#include <ArduinoBLE.h>
+
 #include <Adafruit_CCS811.h>
 #include <ArduinoJson.h>
 
@@ -24,10 +26,30 @@ const char* path = "/sensor";
 
 WiFiClient client;
 
+// BLE Service and Characteristics
+BLEService co2Service("180A"); // Custom service UUID
+BLEIntCharacteristic co2Char("2A6E", BLERead | BLENotify); // CO2 ppm
+BLEIntCharacteristic tvocChar("2A6F", BLERead | BLENotify); // TVOC ppb
+
 void setup() {
   Serial.begin(115200);
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
+
+  // BLE setup
+  if (!BLE.begin()) {
+    Serial.println("Starting BLE failed!");
+    while (1);
+  }
+  BLE.setLocalName("CO2Sensor");
+  BLE.setAdvertisedService(co2Service);
+  co2Service.addCharacteristic(co2Char);
+  co2Service.addCharacteristic(tvocChar);
+  BLE.addService(co2Service);
+  co2Char.writeValue(0);
+  tvocChar.writeValue(0);
+  BLE.advertise();
+  Serial.println("BLE device active, waiting for connections...");
 
   // Connect to WiFi
   Serial.print("Connecting to WiFi");
@@ -59,6 +81,9 @@ void loop() {
         int tvoc = sensor.getTVOC();
         Serial.print("CO2: "); Serial.print(co2ppm);
         Serial.print(" ppm, TVOC: "); Serial.print(tvoc); Serial.println(" ppb");
+        // Update BLE characteristics
+        co2Char.writeValue(co2ppm);
+        tvocChar.writeValue(tvoc);
         // Prepare HTTP POST with JSON
         if (client.connect(server, port)) {
           StaticJsonDocument<200> doc;
@@ -122,4 +147,5 @@ void loop() {
       Serial.println("Could not connect to server for fan state");
     }
   }
+  BLE.poll();
 }

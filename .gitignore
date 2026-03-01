@@ -1,0 +1,26 @@
+# Node.js dependencies
+node_modules/
+
+
+
+# Arduino
+*.elf
+*.bin
+*.hex
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Misc
+.env
