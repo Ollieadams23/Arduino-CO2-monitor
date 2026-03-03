@@ -23,10 +23,11 @@ void drawFanState(ArduinoLEDMatrix &matrix, const char *state) {
   matrix.renderBitmap(bitmap, 8, 12);
 }
 
-#include <ArduinoBLE.h>
 
+#include <ArduinoBLE.h>
 #include <Adafruit_CCS811.h>
 #include <ArduinoJson.h>
+#include "config.h"
 
 
 
@@ -43,13 +44,12 @@ void drawFanState(ArduinoLEDMatrix &matrix, const char *state) {
 #define RELAY_PIN 8
 Adafruit_CCS811 sensor;
 
-// WiFi credentials
-const char* ssid = "Repeater-F058";
-const char* password = "Jesus4866";
 
-// Server details
-const char* server = "192.168.1.99"; // Example: your PC's IP
-const int port = 5000;
+// WiFi credentials and server details from config.h
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+const char* server = SERVER_IP;
+const int port = SERVER_PORT;
 const char* path = "/sensor";
 
 WiFiClient client;

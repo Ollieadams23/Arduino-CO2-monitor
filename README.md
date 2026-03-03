@@ -29,7 +29,13 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
 ### Setup
 1. **Arduino Firmware**
    - Open `main_wifi/main_wifi.ino` in the Arduino IDE.
-   - Update WiFi credentials in the code.
+   - Edit `main_wifi/config.h` to set your WiFi credentials and server IP address:
+     ```cpp
+     #define WIFI_SSID     "your_wifi_ssid"
+     #define WIFI_PASSWORD "your_wifi_password"
+     #define SERVER_IP     "192.168.1.99"
+     #define SERVER_PORT   5000
+     ```
    - Upload to your Arduino board.
 2. **Server**
    - Install dependencies: `npm install`
