@@ -178,29 +178,7 @@ void loop() {
         // Update BLE characteristics
         co2Char.writeValue(co2ppm);
         tvocChar.writeValue(tvoc);
-        // Prepare HTTP POST with JSON
-        if (client.connect(server, port)) {
-          StaticJsonDocument<200> doc;
-          doc["co2"] = co2ppm;
-          doc["tvoc"] = tvoc;
-          String json;
-          serializeJson(doc, json);
-          client.println(String("POST ") + path + " HTTP/1.1");
-          client.println(String("Host: ") + server);
-          client.println("Content-Type: application/json");
-          client.print("Content-Length: "); client.println(json.length());
-          client.println();
-          client.print(json);
-          Serial.println("JSON data sent to server");
-          delay(100);
-          while (client.available()) {
-            String line = client.readStringUntil('\n');
-            Serial.println(line);
-          }
-          client.stop();
-        } else {
-          Serial.println("Connection to server failed");
-        }
+        // Removed: HTTP POST to backend server
         // Fan control logic
         if (fanMode == FAN_MANUAL_ON) {
           digitalWrite(RELAY_PIN, HIGH);
