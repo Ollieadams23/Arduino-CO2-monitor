@@ -64,7 +64,11 @@ BLEService co2Service("180A"); // Custom service UUID
 BLEIntCharacteristic co2Char("2A6E", BLERead | BLENotify); // CO2 ppm
 BLEIntCharacteristic tvocChar("2A6F", BLERead | BLENotify); // TVOC ppb
 
+
 ArduinoLEDMatrix matrix;
+
+// Function prototype for updateMatrixDisplay
+void updateMatrixDisplay(int co2ppm, bool fanOn);
 
 // Add a variable to track fan control mode
 enum FanMode { FAN_AUTO, FAN_MANUAL_ON };
@@ -115,15 +119,79 @@ void setup() {
 }
 
 void loop() {
-  static unsigned long lastSend = 0;
-  static unsigned long lastFanCheck = 0;
   static int lastCO2 = 0;
   int co2ppm = 0;
   int tvoc = 0;
+  static unsigned long lastSend = 0;
+  static unsigned long lastFanCheck = 0;
   bool fanOn = false;
 
-  // Handle incoming web requests (serve dashboard.html and /data endpoint)
+  // --- Unified web server handler ---
   WiFiClient webClient = webServer.available();
+  if (webClient) {
+    while (!webClient.available()) { delay(1); }
+    String req = webClient.readStringUntil('\r');
+    webClient.readStringUntil('\n');
+    // Check all endpoints in order
+    bool isFanOn = req.indexOf("POST /fan/on") == 0;
+    bool isFanOff = req.indexOf("POST /fan/off") == 0;
+    bool isRoot = req.indexOf("GET / ") == 0 || req.indexOf("GET /HTTP") == 0;
+    bool isData = req.indexOf("GET /data") == 0;
+    if (isFanOn) {
+      fanMode = FAN_MANUAL_ON;
+      digitalWrite(RELAY_PIN, HIGH);
+      fanState = true;
+      webClient.println("HTTP/1.1 200 OK");
+      webClient.println("Content-Type: application/json");
+      webClient.println("Connection: close");
+      webClient.println();
+      webClient.print("{\"fan\":\"on\"}");
+      delay(1);
+      webClient.stop();
+    } else if (isFanOff) {
+      fanMode = FAN_AUTO;
+      webClient.println("HTTP/1.1 200 OK");
+      webClient.println("Content-Type: application/json");
+      webClient.println("Connection: close");
+      webClient.println();
+      webClient.print("{\"fan\":\"auto\"}");
+      delay(1);
+      webClient.stop();
+    } else if (isRoot) {
+      // Serve dashboard.html (embedded as a string for now)
+      webClient.println("HTTP/1.1 200 OK");
+      webClient.println("Content-Type: text/html");
+      webClient.println("Connection: close");
+      webClient.println();
+      webClient.println("<!DOCTYPE html><html><head><title>CO2 Sensor Dashboard</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><style>body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(120deg,#e0eafc,#cfdef3);color:#222;margin:0;padding:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;}.dashboard{background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,0.08);padding:2rem 3rem;margin-top:2rem;text-align:center;min-width:320px;}h1{color:#2a5298;margin-bottom:1.5rem;}.reading{font-size:2.5rem;margin:1rem 0;font-weight:bold;letter-spacing:2px;}.label{font-size:1.1rem;color:#555;}.fan-btn{background:linear-gradient(90deg,#2a5298,#1e3c72);color:#fff;border:none;border-radius:8px;padding:0.7rem 2rem;margin:0.5rem 1rem;font-size:1.1rem;cursor:pointer;transition:background 0.2s,transform 0.2s;box-shadow:0 2px 8px rgba(42,82,152,0.08);}.fan-btn:hover{background:linear-gradient(90deg,#1e3c72,#2a5298);transform:translateY(-2px) scale(1.04);}.fan-state{margin-top:1.5rem;font-size:1.2rem;color:#2a5298;font-weight:500;}.footer{margin-top:2rem;color:#888;font-size:0.95rem;}</style></head><body><div class=\"dashboard\"><h1>CO₂ Sensor Dashboard</h1><div style=\"margin:2rem 0;\"><canvas id=\"co2gauge\" width=\"220\" height=\"120\"></canvas></div><div class=\"reading\"><span id=\"co2\">-</span> <span class=\"label\">ppm CO₂</span></div><div class=\"reading\"><span id=\"tvoc\">-</span> <span class=\"label\">ppb TVOC</span></div><button class=\"fan-btn\" onclick=\"fan('on')\">Fan ON</button><button class=\"fan-btn\" onclick=\"fan('off')\">Fan OFF/AUTO</button><div class=\"fan-state\">Fan State: <span id=\"fan\">-</span></div></div><div class=\"footer\">Arduino CO₂ Sensor &copy; 2026</div><script>function drawGauge(value){value=Math.max(0,Math.min(2000,value));const canvas=document.getElementById('co2gauge');const ctx=canvas.getContext('2d');ctx.fillStyle='#ffff66';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.beginPath();ctx.arc(110,110,90,Math.PI,2*Math.PI);ctx.lineWidth=20;ctx.strokeStyle=value>1000?'#ffcccc':'#eee';ctx.stroke();ctx.beginPath();ctx.arc(110,110,90,Math.PI,Math.PI+(value/2000)*Math.PI,false);ctx.lineWidth=20;ctx.strokeStyle=value>1000?'#e53935':'#2a5298';ctx.stroke();const angle=Math.PI+(value/2000)*Math.PI+(90*Math.PI/180);ctx.save();ctx.translate(110,110);ctx.rotate(angle);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-70);ctx.lineWidth=10;ctx.strokeStyle='#ff0000';ctx.stroke();ctx.restore();ctx.beginPath();ctx.arc(110,110,12,0,2*Math.PI);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#888';ctx.lineWidth=2;ctx.stroke();ctx.font='20px Segoe UI';ctx.fillStyle=value>1000?'#e53935':'#2a5298';ctx.textAlign='center';ctx.fillText(value+' ppm',110,70);ctx.font='14px Segoe UI';ctx.fillStyle='#888';ctx.fillText('0',30,120);ctx.fillText('2000',190,120);}function updateData(){fetch('/data').then(r=>r.json()).then(d=>{document.getElementById('co2').textContent=d.co2;document.getElementById('tvoc').textContent=d.tvoc;drawGauge(Number(d.co2)||0);});fetch('/fan/state').then(r=>r.json()).then(d=>{document.getElementById('fan').textContent=d.fan;});}function fan(state){fetch('/fan/'+state,{method:'POST'}).then(updateData);}setInterval(updateData,5000);updateData();drawGauge(0);</script></body></html>");
+      delay(1);
+      webClient.stop();
+    } else if (isData) {
+      // Serve JSON with latest CO2 and TVOC values
+      webClient.println("HTTP/1.1 200 OK");
+      webClient.println("Content-Type: application/json");
+      webClient.println("Connection: close");
+      webClient.println();
+      webClient.print("{\"co2\":");
+      webClient.print(lastCO2);
+      webClient.print(",\"tvoc\":");
+      webClient.print(tvoc);
+      webClient.println("}");
+      delay(1);
+      webClient.stop();
+    } else {
+      // 404 Not Found
+      webClient.println("HTTP/1.1 404 Not Found");
+      webClient.println("Content-Type: text/plain");
+      webClient.println("Connection: close");
+      webClient.println();
+      webClient.println("Not found");
+      delay(1);
+      webClient.stop();
+    }
+
+  // Handle incoming web requests (serve dashboard.html and /data endpoint)
+  // Only declare webClient once for all web server handling
   if (webClient) {
     // Wait until the client sends some data
     while (!webClient.available()) {
@@ -208,7 +276,7 @@ void loop() {
   // Removed: Check fan state from server every 5 seconds
   BLE.poll();
 }
-
+}
 void updateMatrixDisplay(int co2ppm, bool fanOn) {
   drawFanState(matrix, fanOn ? "ON" : "OFF");
 }
