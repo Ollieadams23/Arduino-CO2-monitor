@@ -1,5 +1,7 @@
 #include <Arduino_LED_Matrix.h>
 #include "font5x5.h"
+// Use WiFiServer for basic web server functionality
+
 // Helper to draw only fan state (centered vertically)
 void drawFanState(ArduinoLEDMatrix &matrix, const char *state) {
   uint8_t bitmap[8][12] = {0}; // 8 rows x 12 columns
@@ -54,6 +56,9 @@ const char* path = "/sensor";
 
 WiFiClient client;
 
+// Create a WiFiServer on port 80 for web page hosting
+WiFiServer webServer(80);
+
 // BLE Service and Characteristics
 BLEService co2Service("180A"); // Custom service UUID
 BLEIntCharacteristic co2Char("2A6E", BLERead | BLENotify); // CO2 ppm
@@ -97,6 +102,9 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  // Start the web server
+  webServer.begin();
+
   // CCS811 sensor init
   if(!sensor.begin()){
     Serial.println("Failed to start CCS811 sensor! Please check your wiring.");
@@ -113,6 +121,26 @@ void loop() {
   int co2ppm = 0;
   int tvoc = 0;
   bool fanOn = false;
+
+  // Handle incoming web requests (basic web page)
+  WiFiClient webClient = webServer.available();
+  if (webClient) {
+    // Wait until the client sends some data
+    while (!webClient.available()) {
+      delay(1);
+    }
+    // Read the first line of the request
+    String req = webClient.readStringUntil('\r');
+    webClient.readStringUntil('\n'); // skip to end of line
+    // Send a basic HTTP response
+    webClient.println("HTTP/1.1 200 OK");
+    webClient.println("Content-Type: text/html");
+    webClient.println("Connection: close");
+    webClient.println();
+    webClient.println("<html><body><h1>CO2 Monitor Web Server</h1><p>Device is online.</p></body></html>");
+    delay(1);
+    webClient.stop();
+  }
   if (millis() - lastSend >= 5000) { // Send every 5 seconds
     lastSend = millis();
     if(sensor.available()){
