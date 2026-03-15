@@ -70,17 +70,17 @@
 </head>
 <body>
   <div class="dashboard">
-    <h1>CO₂ Sensor Dashboard</h1>
+    <h1>CO2 Sensor Dashboard</h1>
     <div style="margin:2rem 0;">
       <canvas id="co2gauge" width="220" height="120"></canvas>
     </div>
-    <div class="reading"><span id="co2">-</span> <span class="label">ppm CO₂</span></div>
+    <div class="reading"><span id="co2">-</span> <span class="label">ppm CO2</span></div>
     <div class="reading"><span id="tvoc">-</span> <span class="label">ppb TVOC</span></div>
     <button class="fan-btn" onclick="fan('on')">Fan ON</button>
     <button class="fan-btn" onclick="fan('off')">Fan OFF/AUTO</button>
     <div class="fan-state">Fan State: <span id="fan">-</span></div>
   </div>
-  <div class="footer">Arduino CO₂ Sensor &copy; 2026</div>
+  <div class="footer">Arduino CO2 Sensor &copy; 2026</div>
   <script>
     function drawGauge(value) {
       // Clamp value between 0 and 2000
