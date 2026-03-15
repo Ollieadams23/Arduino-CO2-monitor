@@ -1,6 +1,9 @@
 {
-  "dependencies": {
-    "body-parser": "^2.2.2",
-    "express": "^5.2.1"
-  }
+  "name": "arduino-co2-monitor",
+  "version": "1.0.0",
+  "description": "(No longer used) Node.js dependencies removed. All server and dashboard functionality is now handled by the Arduino firmware.",
+  "main": "",
+  "scripts": {},
+  "author": "Ollie",
+  "license": "MIT"
 }
