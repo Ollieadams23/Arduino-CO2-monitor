@@ -127,8 +127,9 @@ void setup() {
 void loop() {
     // ...existing code...
   static int lastCO2 = 0;
-  int co2ppm = 0;
-  int tvoc = 0;
+  static int lastTVOC = 0;
+  static int co2ppm = 0;
+  static int tvoc = 0;
   static unsigned long lastSend = 0;
   static unsigned long lastFanCheck = 0;
   bool fanOn = false;
@@ -320,7 +321,7 @@ void loop() {
       webClient.print("{\"co2\":");
       webClient.print(lastCO2);
       webClient.print(",\"tvoc\":");
-      webClient.print(tvoc);
+      webClient.print(lastTVOC);
       webClient.println("}");
       delay(1);
       webClient.stop();
@@ -360,7 +361,6 @@ void loop() {
         // Update BLE characteristics
         co2Char.writeValue(co2ppm);
         tvocChar.writeValue(tvoc);
-        // Removed: HTTP POST to backend server
         // Fan control logic
         if (fanMode == FAN_MANUAL_ON) {
           digitalWrite(RELAY_PIN, HIGH);
@@ -380,6 +380,7 @@ void loop() {
         }
         updateMatrixDisplay(co2ppm, fanState);
         lastCO2 = co2ppm;
+        lastTVOC = tvoc;
       } else {
         Serial.println("CCS811 readData failed");
       }
