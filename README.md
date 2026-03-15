@@ -60,3 +60,21 @@ MIT License
 
 ## Author
 Ollie
+
+## Bluetooth Low Energy (BLE) Support
+
+This device also broadcasts sensor data over Bluetooth Low Energy (BLE).
+
+- **Device Name:** `CO2Sensor`
+- **Service UUID:** `180A` (custom)
+- **Characteristics:**
+  - `2A6E` (CO2, ppm, readable/notify)
+  - `2A6F` (TVOC, ppb, readable/notify)
+
+### How to Connect
+1. Use a BLE scanner app (such as LightBlue or nRF Connect) on your phone or tablet.
+2. Scan for devices and connect to `CO2Sensor`.
+3. After connecting, look for the custom service (UUID `180A`).
+4. You can read the CO2 and TVOC values from the characteristics listed above.
+
+> Note: BLE is not a serial Bluetooth connection. Use a BLE app, not a serial Bluetooth app.
