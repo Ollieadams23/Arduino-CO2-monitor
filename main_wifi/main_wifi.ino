@@ -137,6 +137,7 @@ void loop() {
     bool isFanOff = req.indexOf("POST /fan/off") == 0;
     bool isRoot = req.indexOf("GET / ") == 0 || req.indexOf("GET /HTTP") == 0;
     bool isData = req.indexOf("GET /data") == 0;
+    bool isFanState = req.indexOf("GET /fan/state") == 0;
     if (isFanOn) {
       fanMode = FAN_MANUAL_ON;
       digitalWrite(RELAY_PIN, HIGH);
@@ -177,6 +178,19 @@ void loop() {
       webClient.print(",\"tvoc\":");
       webClient.print(tvoc);
       webClient.println("}");
+      delay(1);
+      webClient.stop();
+    } else if (isFanState) {
+      // Serve JSON with current fan state
+      webClient.println("HTTP/1.1 200 OK");
+      webClient.println("Content-Type: application/json");
+      webClient.println("Connection: close");
+      webClient.println();
+      if (fanMode == FAN_MANUAL_ON) {
+        webClient.print("{\"fan\":\"on\"}");
+      } else {
+        webClient.print("{\"fan\":\"auto\"}");
+      }
       delay(1);
       webClient.stop();
     } else {
