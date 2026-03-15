@@ -227,37 +227,7 @@ void loop() {
       Serial.println("CCS811 not available");
     }
   }
-  // Check fan state from server every 5 seconds
-  if (millis() - lastFanCheck >= 5000) {
-    lastFanCheck = millis();
-    if (client.connect(server, port)) {
-      client.println("GET /fan/state HTTP/1.1");
-      client.println(String("Host: ") + server);
-      client.println("Connection: close");
-      client.println();
-      String response = "";
-      while (client.connected() || client.available()) {
-        if (client.available()) {
-          String line = client.readStringUntil('\n');
-          response += line;
-        }
-      }
-      client.stop();
-      // Parse fan state from response
-      int idx = response.indexOf("{\"fan\":");
-      if (idx != -1) {
-        int onIdx = response.indexOf("on", idx);
-        int offIdx = response.indexOf("off", idx);
-        if (onIdx != -1 && (offIdx == -1 || onIdx < offIdx)) {
-          fanMode = FAN_MANUAL_ON;
-        } else if (offIdx != -1) {
-          fanMode = FAN_AUTO;
-        }
-      }
-    } else {
-      Serial.println("Could not connect to server for fan state");
-    }
-  }
+  // Removed: Check fan state from server every 5 seconds
   BLE.poll();
 }
 
