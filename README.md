@@ -12,16 +12,24 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
 
 ## Features
 - Real-time CO₂ and TVOC monitoring
-- Web dashboard for live data, fan control, and WiFi configuration
+- Web dashboard for live data, relay-based fan control, and WiFi configuration
 - Rolling 24-hour CO₂ trend graph using an in-memory circular buffer
 - WiFi-enabled sensor data transmission
 - BLE support for local data access
+
+## Parts List
+- Arduino Uno R4 WiFi (or compatible board)
+- CCS811 air quality sensor (e.g., XC3782)
+- Relay module for switching the fan
+- Fan or other device connected through the relay
+- WiFi network for optional station-mode connection
 
 ## Getting Started
 
 ### Requirements
 - Arduino Uno R4 WiFi (or compatible board)
 - CCS811 air quality sensor (e.g., XC3782)
+- Relay module for fan control
 - WiFi network
 
 ### Setup
