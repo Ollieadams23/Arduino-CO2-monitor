@@ -1,9 +1,13 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// WiFi credentials
-#define WIFI_SSID     "Repeater-F058"
-#define WIFI_PASSWORD "Jesus4866"
+// Access point credentials served by the device on every boot.
+#define AP_SSID       "arduinowifi"
+#define AP_PASSWORD   "password"
+
+// Station credentials are set from the dashboard and persisted in EEPROM.
+#define WIFI_SSID     ""
+#define WIFI_PASSWORD ""
 
 // Server details
 #define SERVER_IP   "192.168.1.99"   // Change to your server IP

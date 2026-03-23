@@ -37,14 +37,17 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
    - **Note:** The dashboard is served directly from the Arduino's firmware, not from `dashboard.html`.
 
 ## WiFi Configuration
-- **Default WiFi:**
-  - The device starts up using the WiFi SSID and password defined in `main_wifi/config.h`.
-- **Changing WiFi:**
-  - On the dashboard, use the WiFi Config form to enter a new SSID and password, then click "Update WiFi".
-  - The device will attempt to connect to the new WiFi immediately. The new credentials are stored in RAM only.
-- **Reverting to Default:**
-  - If the device is powered off or reset, it will revert to the default WiFi credentials from `config.h` on the next boot.
-  - This ensures you can always recover the device by rebooting it within range of the default WiFi network.
+- **Always-on access point:**
+  - The device always boots its own hotspot using `AP_SSID` and `AP_PASSWORD` from `main_wifi/config.h`.
+  - By default that hotspot is `arduinowifi` on `192.168.4.1`.
+- **Station WiFi:**
+  - The device does not auto-join any station WiFi during boot.
+  - When the dashboard saves WiFi credentials, the device attempts that station connection immediately while keeping the hotspot available.
+  - Saved station credentials are persisted in EEPROM for display and reuse, but boot still starts in AP mode first.
+- **Changing WiFi from the dashboard:**
+  - Connect to the device hotspot, open the dashboard, and submit a new SSID/password in the WiFi form.
+  - The hotspot stays up while the device attempts to join the new network.
+  - If the target network is unavailable, the device disconnects the failed station attempt and returns to AP mode so the dashboard remains reachable on the hotspot.
 
 ## Usage
 - The Arduino sensor reads CO₂ levels and serves a web dashboard for live data and control.
