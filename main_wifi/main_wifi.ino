@@ -101,15 +101,20 @@ void setup() {
   BLE.advertise();
   Serial.println("BLE device active, waiting for connections...");
 
-  // Connect to WiFi
-  Serial.print("Connecting to WiFi");
-  WiFi.begin(currentSsid, currentPassword);
-  while (WiFi.status() != WL_CONNECTED) {
+
+  // Set up as WiFi Access Point with static IP
+  IPAddress local_ip(192,168,4,1);
+  IPAddress gateway(192,168,4,1);
+  IPAddress subnet(255,255,255,0);
+  WiFi.config(local_ip, gateway, subnet);
+  Serial.print("Starting Access Point");
+  WiFi.beginAP(currentSsid, currentPassword);
+  while (WiFi.status() != WL_AP_LISTENING && WiFi.status() != WL_AP_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nWiFi connected!");
-  Serial.print("IP address: ");
+  Serial.println("\nAccess Point started!");
+  Serial.print("AP IP address: ");
   Serial.println(WiFi.localIP());
 
   // Start the web server
