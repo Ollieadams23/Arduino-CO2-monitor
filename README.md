@@ -13,6 +13,7 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
 ## Features
 - Real-time CO₂ and TVOC monitoring
 - Web dashboard for live data, fan control, and WiFi configuration
+- Rolling 24-hour CO₂ trend graph using an in-memory circular buffer
 - WiFi-enabled sensor data transmission
 - BLE support for local data access
 
@@ -53,10 +54,12 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
 - The Arduino sensor reads CO₂ levels and serves a web dashboard for live data and control.
 - Adjust fan ON/OFF from the dashboard.
 - Update WiFi credentials from the dashboard as needed.
+- The dashboard includes a rolling 24-hour CO₂ graph using 5-minute samples. Old samples are overwritten automatically as new ones arrive.
 
 ## Notes
 - No Node.js, Express, or body-parser dependencies are required. All server and dashboard functionality is handled by the Arduino firmware.
 - The `package.json` file is now empty and can be deleted if not needed for other tooling.
+- History data is stored only in RAM, so it resets whenever the device restarts or loses power.
 
 ## License
 MIT License

@@ -12,6 +12,8 @@
 #define RELAY_PIN 8
 #define WIFI_CONFIG_MAGIC 0x434F3257UL
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL
+#define HISTORY_SAMPLE_INTERVAL_MS 300000UL
+#define HISTORY_SAMPLE_COUNT 288
 
 struct StoredWifiConfig {
   uint32_t magic;
@@ -35,11 +37,15 @@ int fanOnThreshold = 1000;
 int lastCO2 = 0;
 int lastTVOC = 0;
 unsigned long lastSensorRead = 0;
+unsigned long lastHistorySampleAt = 0;
 
 char stationSsid[33] = "";
 char stationPassword[65] = "";
 IPAddress apIp(192, 168, 4, 1);
 IPAddress stationIp(0, 0, 0, 0);
+uint16_t co2History[HISTORY_SAMPLE_COUNT] = {0};
+uint16_t historyHead = 0;
+uint16_t historyCount = 0;
 
 int fanOffThreshold() {
   return fanOnThreshold - 200;
@@ -120,6 +126,41 @@ String wifiFailureReason(int status) {
 void logWifiFailureReason(int status) {
   Serial.print("WiFi error detail: ");
   Serial.println(wifiFailureReason(status));
+}
+
+void addHistorySample(int co2ppm) {
+  int boundedValue = co2ppm;
+  if (boundedValue < 0) {
+    boundedValue = 0;
+  }
+  if (boundedValue > 65535) {
+    boundedValue = 65535;
+  }
+
+  co2History[historyHead] = static_cast<uint16_t>(boundedValue);
+  historyHead = (historyHead + 1) % HISTORY_SAMPLE_COUNT;
+  if (historyCount < HISTORY_SAMPLE_COUNT) {
+    historyCount++;
+  }
+}
+
+String buildHistoryJson() {
+  String body;
+  body.reserve(64 + historyCount * 6);
+  body = "{\"intervalMinutes\":5,\"windowHours\":24,\"count\":";
+  body += String(historyCount);
+  body += ",\"co2\":[";
+
+  for (uint16_t sampleIndex = 0; sampleIndex < historyCount; sampleIndex++) {
+    uint16_t ringIndex = (historyHead + HISTORY_SAMPLE_COUNT - historyCount + sampleIndex) % HISTORY_SAMPLE_COUNT;
+    body += String(co2History[ringIndex]);
+    if (sampleIndex + 1 < historyCount) {
+      body += ',';
+    }
+  }
+
+  body += "]}";
+  return body;
 }
 
 String jsonEscape(const String &value) {
@@ -306,8 +347,12 @@ String buildWifiInfoJson() {
   return body;
 }
 
-String buildDashboardHtml() {
-  return String(R"HTML(
+void sendDashboardHtml(WiFiClient &client) {
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: text/html"));
+  client.println(F("Connection: close"));
+  client.println();
+  client.print(F(R"HTML(
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -374,6 +419,9 @@ String buildDashboardHtml() {
       border: 1px solid rgba(18, 61, 88, 0.08);
       border-radius: 20px;
       padding: 20px;
+    }
+    .card.wide {
+      grid-column: 1 / -1;
     }
     .card h2 {
       margin: 0 0 14px;
@@ -450,6 +498,13 @@ String buildDashboardHtml() {
       display: block;
       margin: 0 auto;
     }
+    .history-canvas {
+      max-width: 100%;
+      height: 220px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(15,123,108,0.05), rgba(15,123,108,0.01));
+      border: 1px solid rgba(18, 61, 88, 0.08);
+    }
     .footer {
       padding: 0 20px 20px;
       color: var(--muted);
@@ -469,8 +524,12 @@ String buildDashboardHtml() {
         <h2>Air Quality</h2>
         <canvas id="co2Gauge" width="260" height="150"></canvas>
         <div class="reading"><span id="co2">-</span> ppm</div>
-        <div class="subtle">Safe CO2 level: under 800 ppm</div>
         <div class="subtle">TVOC: <strong id="tvoc">-</strong> ppb</div>
+      </article>
+      <article class="card wide">
+        <h2>24 Hour CO2 Trend</h2>
+        <canvas class="history-canvas" id="historyChart" width="860" height="220"></canvas>
+        <div class="subtle" id="historyMeta">Rolling 24-hour history using 5-minute samples. Data resets when the device restarts.</div>
       </article>
       <article class="card">
         <h2>Fan Control</h2>
@@ -483,6 +542,7 @@ String buildDashboardHtml() {
           <label for="threshold">Fan ON threshold (ppm)</label>
           <input id="threshold" type="number" min="400" max="5000" step="1" required>
           <button class="primary" type="submit">Save Threshold</button>
+          <div style="color: #b64242; font-size: 0.92rem; font-weight: 700;">Safe CO2 level: under 800 ppm</div>
         </form>
         <div class="status-line" id="thresholdStatus"></div>
       </article>
@@ -551,6 +611,105 @@ String buildDashboardHtml() {
       ctx.textAlign = 'center';
       ctx.fillText('0', 38, 136);
       ctx.fillText('2000', 222, 136);
+    }
+
+    function drawHistoryChart(history) {
+      const canvas = document.getElementById('historyChart');
+      const meta = document.getElementById('historyMeta');
+      const ctx = canvas.getContext('2d');
+      const values = history && Array.isArray(history.co2) ? history.co2 : [];
+      const intervalMinutes = history && history.intervalMinutes ? history.intervalMinutes : 5;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const left = 42;
+      const right = 12;
+      const top = 16;
+      const bottom = 30;
+      const chartWidth = canvas.width - left - right;
+      const chartHeight = canvas.height - top - bottom;
+
+      ctx.strokeStyle = 'rgba(22, 49, 66, 0.12)';
+      ctx.lineWidth = 1;
+      for (let gridIndex = 0; gridIndex <= 4; gridIndex++) {
+        const y = top + (chartHeight / 4) * gridIndex;
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(left + chartWidth, y);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#4d6574';
+      ctx.font = '12px Trebuchet MS';
+      ctx.textAlign = 'left';
+      ctx.fillText('oldest', left, canvas.height - 8);
+      ctx.textAlign = 'center';
+      ctx.fillText('12h', left + chartWidth / 2, canvas.height - 8);
+      ctx.textAlign = 'right';
+      ctx.fillText('now', left + chartWidth, canvas.height - 8);
+
+      if (!values.length) {
+        ctx.fillStyle = '#4d6574';
+        ctx.textAlign = 'center';
+        ctx.font = '15px Trebuchet MS';
+        ctx.fillText('History will appear after the first saved samples.', canvas.width / 2, canvas.height / 2);
+        meta.textContent = 'Rolling 24-hour history using 5-minute samples. Data resets when the device restarts.';
+        return;
+      }
+
+      const minValue = Math.min(...values);
+      const maxValue = Math.max(...values);
+      const paddedMin = Math.max(350, Math.floor((minValue - 80) / 100) * 100);
+      const paddedMax = Math.max(1200, Math.ceil((maxValue + 80) / 100) * 100);
+      const valueRange = Math.max(100, paddedMax - paddedMin);
+
+      ctx.fillStyle = '#4d6574';
+      ctx.textAlign = 'right';
+      for (let gridIndex = 0; gridIndex <= 4; gridIndex++) {
+        const value = paddedMax - (valueRange / 4) * gridIndex;
+        const y = top + (chartHeight / 4) * gridIndex + 4;
+        ctx.fillText(String(Math.round(value)), left - 8, y);
+      }
+
+      const safeThreshold = 800;
+      if (safeThreshold >= paddedMin && safeThreshold <= paddedMax) {
+        const safeY = top + chartHeight - ((safeThreshold - paddedMin) / valueRange) * chartHeight;
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = '#b64242';
+        ctx.beginPath();
+        ctx.moveTo(left, safeY);
+        ctx.lineTo(left + chartWidth, safeY);
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = '#b64242';
+        ctx.textAlign = 'left';
+        ctx.fillText('800 ppm safe line', left + 8, safeY - 6);
+      }
+
+      ctx.strokeStyle = '#0c5c78';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      values.forEach((entry, index) => {
+        const x = values.length === 1 ? left + chartWidth : left + (index / (values.length - 1)) * chartWidth;
+        const y = top + chartHeight - ((entry - paddedMin) / valueRange) * chartHeight;
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+
+      const latest = values[values.length - 1];
+      const coveredHours = ((values.length - 1) * intervalMinutes) / 60;
+      meta.textContent = 'Rolling 24-hour history using ' + intervalMinutes + '-minute samples. Showing ' + coveredHours.toFixed(1) + ' hours, latest CO2 ' + latest + ' ppm.';
+    }
+
+    function updateHistory() {
+      fetch('/history')
+        .then(r => r.json())
+        .then(drawHistoryChart)
+        .catch(() => drawHistoryChart({ co2: [] }));
     }
 
     function updateData() {
@@ -640,12 +799,14 @@ String buildDashboardHtml() {
     }
 
     setInterval(updateData, 5000);
+    setInterval(updateHistory, 60000);
     updateData();
+    updateHistory();
     drawGauge(0);
   </script>
 </body>
 </html>
-)HTML");
+)HTML"));
 }
 
 void handleWifiUpdate(WiFiClient &client, const String &body) {
@@ -756,7 +917,9 @@ void handleWebClient() {
   }
 
   if (method == "GET" && path == "/") {
-    sendResponse(client, "text/html", buildDashboardHtml());
+    sendDashboardHtml(client);
+  } else if (method == "GET" && path == "/history") {
+    sendResponse(client, "application/json", buildHistoryJson());
   } else if (method == "GET" && path == "/data") {
     sendResponse(client, "application/json", "{\"co2\":" + String(lastCO2) + ",\"tvoc\":" + String(lastTVOC) + "}");
   } else if (method == "GET" && path == "/fan/state") {
@@ -836,6 +999,11 @@ void loop() {
       if (!sensor.readData()) {
         lastCO2 = sensor.geteCO2();
         lastTVOC = sensor.getTVOC();
+
+        if (lastHistorySampleAt == 0 || millis() - lastHistorySampleAt >= HISTORY_SAMPLE_INTERVAL_MS) {
+          addHistorySample(lastCO2);
+          lastHistorySampleAt = millis();
+        }
 
         co2Char.writeValue(lastCO2);
         tvocChar.writeValue(lastTVOC);
