@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoBLE.h>
 #include <Arduino_LED_Matrix.h>
-#include <Adafruit_CCS811.h>
+#include <SensirionI2cScd4x.h>
 #include <EEPROM.h>
 #include <WiFiS3.h>
 #include <Wire.h>
@@ -14,6 +14,7 @@
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL
 #define HISTORY_SAMPLE_INTERVAL_MS 300000UL
 #define HISTORY_SAMPLE_COUNT 288
+#define SENSOR_RETRY_INTERVAL_MS 5000UL
 
 struct StoredWifiConfig {
   uint32_t magic;
@@ -21,7 +22,7 @@ struct StoredWifiConfig {
   char password[65];
 };
 
-Adafruit_CCS811 sensor;
+SensirionI2cScd4x sensor;
 ArduinoLEDMatrix matrix;
 WiFiServer webServer(80);
 
@@ -38,6 +39,9 @@ int lastCO2 = 0;
 int lastTVOC = 0;
 unsigned long lastSensorRead = 0;
 unsigned long lastHistorySampleAt = 0;
+unsigned long lastSensorRetryAt = 0;
+int16_t lastSensorError = 0;
+bool sensorOnline = false;
 
 char stationSsid[33] = "";
 char stationPassword[65] = "";
@@ -49,6 +53,22 @@ uint16_t historyCount = 0;
 
 int fanOffThreshold() {
   return fanOnThreshold - 200;
+}
+
+void tryStartSensor() {
+  sensor.begin(Wire, SCD41_I2C_ADDR_62);
+  lastSensorError = sensor.startPeriodicMeasurement();
+  if (lastSensorError != 0) {
+    sensorOnline = false;
+    Serial.print("Failed to start SCD40 periodic measurement. Error: ");
+    Serial.println(lastSensorError);
+    Serial.println("Sensor will stay offline, but the dashboard will remain available.");
+    return;
+  }
+
+  sensorOnline = true;
+  lastSensorRead = 0;
+  Serial.println("SCD40 sensor ready.");
 }
 
 void drawFanState(ArduinoLEDMatrix &displayMatrix, const char *state) {
@@ -979,26 +999,34 @@ void setup() {
   startAccessPoint();
   webServer.begin();
 
-  if (!sensor.begin()) {
-    Serial.println("Failed to start CCS811 sensor! Please check your wiring.");
-    while (1) {
-    }
-  }
+  Wire.begin();
+  tryStartSensor();
 
   matrix.begin();
-  Serial.println("Sensor ready.");
 }
 
 void loop() {
   handleWebClient();
 
-  if (millis() - lastSensorRead >= 5000) {
+  if (!sensorOnline && millis() - lastSensorRetryAt >= SENSOR_RETRY_INTERVAL_MS) {
+    lastSensorRetryAt = millis();
+    tryStartSensor();
+  }
+
+  if (sensorOnline && millis() - lastSensorRead >= 5000) {
     lastSensorRead = millis();
 
-    if (sensor.available()) {
-      if (!sensor.readData()) {
-        lastCO2 = sensor.geteCO2();
-        lastTVOC = sensor.getTVOC();
+    bool dataReady = false;
+    lastSensorError = sensor.getDataReadyStatus(dataReady);
+    if (lastSensorError == 0 && dataReady) {
+      uint16_t co2 = 0;
+      float temperature = 0.0f;
+      float humidity = 0.0f;
+
+      lastSensorError = sensor.readMeasurement(co2, temperature, humidity);
+      if (lastSensorError == 0) {
+        lastCO2 = co2;
+        lastTVOC = 0;
 
         if (lastHistorySampleAt == 0 || millis() - lastHistorySampleAt >= HISTORY_SAMPLE_INTERVAL_MS) {
           addHistorySample(lastCO2);
@@ -1021,15 +1049,19 @@ void loop() {
 
         Serial.print("CO2: ");
         Serial.print(lastCO2);
-        Serial.print(" ppm, TVOC: ");
-        Serial.print(lastTVOC);
-        Serial.print(" ppb, STA status: ");
+        Serial.print(" ppm, Temp: ");
+        Serial.print(temperature, 1);
+        Serial.print(" C, Humidity: ");
+        Serial.print(humidity, 1);
+        Serial.print(" %, STA status: ");
         Serial.println(wifiStatusLabel(WiFi.status()));
       } else {
-        Serial.println("CCS811 readData failed");
+        Serial.print("SCD40 readMeasurement failed. Error: ");
+        Serial.println(lastSensorError);
       }
-    } else {
-      Serial.println("CCS811 not available");
+    } else if (lastSensorError != 0) {
+      Serial.print("SCD40 getDataReadyStatus failed. Error: ");
+      Serial.println(lastSensorError);
     }
   }
 
