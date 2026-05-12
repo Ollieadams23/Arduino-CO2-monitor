@@ -57,6 +57,29 @@ int fanOffThreshold() {
 
 void tryStartSensor() {
   sensor.begin(Wire, SCD41_I2C_ADDR_62);
+  delay(30);
+
+  lastSensorError = sensor.wakeUp();
+  if (lastSensorError != 0) {
+    Serial.print("SCD40 wakeUp returned: ");
+    Serial.println(lastSensorError);
+  }
+
+  lastSensorError = sensor.stopPeriodicMeasurement();
+  if (lastSensorError != 0) {
+    Serial.print("SCD40 stopPeriodicMeasurement returned: ");
+    Serial.println(lastSensorError);
+  }
+
+  lastSensorError = sensor.reinit();
+  if (lastSensorError != 0) {
+    sensorOnline = false;
+    Serial.print("Failed to reinitialize SCD40. Error: ");
+    Serial.println(lastSensorError);
+    Serial.println("Sensor will stay offline, but the dashboard will remain available.");
+    return;
+  }
+
   lastSensorError = sensor.startPeriodicMeasurement();
   if (lastSensorError != 0) {
     sensorOnline = false;

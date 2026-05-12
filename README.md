@@ -1,6 +1,6 @@
 # Arduino CO₂ Sensor Project
 
-This project monitors CO₂ levels using an Arduino-based sensor and provides a web dashboard for real-time data visualization, fan control, and WiFi configuration.
+This project monitors CO2 levels using an Arduino-based sensor and provides a web dashboard for real-time data visualization, fan control, and WiFi configuration.
 
 ## Project Structure
 
@@ -11,15 +11,15 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
   - `config.h` — Default WiFi credentials.
 
 ## Features
-- Real-time CO₂ and TVOC monitoring
-- Web dashboard for live data, relay-based fan control, and WiFi configuration
-- Rolling 24-hour CO₂ trend graph using an in-memory circular buffer
+- Real-time CO2, temperature, and humidity monitoring with an SCD40 sensor
+- Web dashboard with live CO2 and temperature gauges, humidity display, fan control, and WiFi configuration
+- Rolling 24-hour CO2 trend graph using an in-memory circular buffer
 - WiFi-enabled sensor data transmission
-- BLE support for local data access
+- BLE support for local CO2 data access
 
 ## Parts List
 - Arduino Uno R4 WiFi (or compatible board)
-- CCS811 air quality sensor (e.g., XC3782)
+- Sensirion SCD40 CO2 sensor
 - Relay module for switching the fan
 - Fan or other device connected through the relay
 - WiFi network for optional station-mode connection
@@ -28,7 +28,8 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
 
 ### Requirements
 - Arduino Uno R4 WiFi (or compatible board)
-- CCS811 air quality sensor (e.g., XC3782)
+- Sensirion SCD40 CO2 sensor
+- Arduino libraries: `Sensirion I2C SCD4X` and `Sensirion Core`
 - Relay module for fan control
 - WiFi network
 
@@ -59,10 +60,10 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
   - If the target network is unavailable, the device disconnects the failed station attempt and returns to AP mode so the dashboard remains reachable on the hotspot.
 
 ## Usage
-- The Arduino sensor reads CO₂ levels and serves a web dashboard for live data and control.
+- The Arduino sensor reads CO2, temperature, and humidity and serves a web dashboard for live data and control.
 - Adjust fan ON/OFF from the dashboard.
 - Update WiFi credentials from the dashboard as needed.
-- The dashboard includes a rolling 24-hour CO₂ graph using 5-minute samples. Old samples are overwritten automatically as new ones arrive.
+- The dashboard includes a rolling 24-hour CO2 graph using 5-minute samples. Old samples are overwritten automatically as new ones arrive.
 
 ## Notes
 - No Node.js, Express, or body-parser dependencies are required. All server and dashboard functionality is handled by the Arduino firmware.
@@ -73,7 +74,7 @@ This project monitors CO₂ levels using an Arduino-based sensor and provides a 
 MIT License
 
 ## Author
-Ollie
+[Ollie](https://github.com/Ollieadams23)
 
 ## Bluetooth Low Energy (BLE) Support
 
@@ -83,12 +84,11 @@ This device also broadcasts sensor data over Bluetooth Low Energy (BLE).
 - **Service UUID:** `180A` (custom)
 - **Characteristics:**
   - `2A6E` (CO2, ppm, readable/notify)
-  - `2A6F` (TVOC, ppb, readable/notify)
 
 ### How to Connect
 1. Use a BLE scanner app (such as LightBlue or nRF Connect) on your phone or tablet.
 2. Scan for devices and connect to `CO2Sensor`.
 3. After connecting, look for the custom service (UUID `180A`).
-4. You can read the CO2 and TVOC values from the characteristics listed above.
+4. You can read the CO2 value from the characteristic listed above.
 
 > Note: BLE is not a serial Bluetooth connection. Use a BLE app, not a serial Bluetooth app.
