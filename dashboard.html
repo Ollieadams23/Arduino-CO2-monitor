@@ -79,6 +79,20 @@
       font-weight: 700;
       margin: 10px 0;
     }
+    .gauge-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .gauge-panel {
+      text-align: center;
+    }
+    .gauge-reading {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 700;
+      margin: 10px 0 6px;
+    }
     .subtle {
       color: var(--muted);
       font-size: 0.95rem;
@@ -167,8 +181,17 @@
     <section class="grid">
       <article class="card">
         <h2>Air Quality</h2>
-        <canvas id="co2Gauge" width="260" height="150"></canvas>
-        <div class="reading"><span id="co2">-</span> ppm</div>
+        <div class="gauge-grid">
+          <div class="gauge-panel">
+            <canvas id="co2Gauge" width="260" height="150"></canvas>
+            <div class="reading"><span id="co2">-</span> ppm</div>
+          </div>
+          <div class="gauge-panel">
+            <canvas id="temperatureGauge" width="260" height="150"></canvas>
+            <div class="gauge-reading"><span id="temperature">-</span> C</div>
+            <div class="subtle">Humidity: <strong id="humidity">-</strong> %</div>
+          </div>
+        </div>
       </article>
       <article class="card wide">
         <h2>24 Hour CO2 Trend</h2>
@@ -215,6 +238,47 @@
     <div class="footer">Reference dashboard for the embedded Arduino page</div>
   </main>
   <script>
+    const demoData = {
+      co2: 742,
+      temperature: 22.6,
+      humidity: 47.3,
+      fan: 'auto',
+      threshold: 1000,
+      history: {
+        intervalMinutes: 5,
+        co2: [520, 560, 590, 610, 640, 670, 690, 720, 760, 742]
+      },
+      wifi: {
+        ap: { ssid: 'CO2Sensor-Setup', ip: '192.168.4.1' },
+        station: { configuredSsid: 'Home WiFi', status: 'preview', ip: '192.168.1.99' }
+      }
+    };
+
+    function renderSensorData(data) {
+      document.getElementById('co2').textContent = data.co2;
+      document.getElementById('temperature').textContent = Number(data.temperature || 0).toFixed(1);
+      document.getElementById('humidity').textContent = Number(data.humidity || 0).toFixed(1);
+      drawGauge(data.co2);
+      drawTemperatureGauge(data.temperature);
+    }
+
+    function renderWifiInfo(data) {
+      document.getElementById('apSsid').textContent = data.ap.ssid || '-';
+      document.getElementById('apIp').textContent = data.ap.ip || '-';
+      document.getElementById('staSsid').textContent = data.station.configuredSsid || '-';
+      document.getElementById('staStatus').textContent = data.station.status || '-';
+      document.getElementById('staIp').textContent = data.station.ip || '0.0.0.0';
+    }
+
+    function loadPreviewState() {
+      renderSensorData(demoData);
+      drawHistoryChart(demoData.history);
+      document.getElementById('fanMode').textContent = demoData.fan;
+      document.getElementById('threshold').value = demoData.threshold;
+      renderWifiInfo(demoData.wifi);
+      document.getElementById('wifiStatus').textContent = 'Preview mode: open on the device to see live readings.';
+    }
+
     function drawGauge(value) {
       const safeValue = Math.max(0, Math.min(2000, Number(value) || 0));
       const canvas = document.getElementById('co2Gauge');
@@ -255,6 +319,54 @@
       ctx.textAlign = 'center';
       ctx.fillText('0', 38, 136);
       ctx.fillText('2000', 222, 136);
+    }
+
+    function drawTemperatureGauge(value) {
+      const safeValue = Math.max(0, Math.min(40, Number(value) || 0));
+      const canvas = document.getElementById('temperatureGauge');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.beginPath();
+      ctx.arc(130, 130, 90, Math.PI, 0, false);
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = '#d9e4ea';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(130, 130, 90, Math.PI, Math.PI + (safeValue / 40) * Math.PI, false);
+      ctx.lineWidth = 20;
+      if (safeValue < 16) {
+        ctx.strokeStyle = '#3b82f6';
+      } else if (safeValue < 27) {
+        ctx.strokeStyle = '#0f7b6c';
+      } else {
+        ctx.strokeStyle = '#d26a3f';
+      }
+      ctx.stroke();
+
+      const angle = Math.PI + (safeValue / 40) * Math.PI + (Math.PI / 2);
+      ctx.save();
+      ctx.translate(130, 130);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -72);
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#163142';
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(130, 130, 10, 0, Math.PI * 2);
+      ctx.fillStyle = '#163142';
+      ctx.fill();
+
+      ctx.fillStyle = '#4d6574';
+      ctx.font = '14px Trebuchet MS';
+      ctx.textAlign = 'center';
+      ctx.fillText('0', 38, 136);
+      ctx.fillText('40', 222, 136);
     }
 
     function drawHistoryChart(history) {
@@ -350,33 +462,50 @@
     }
 
     function updateHistory() {
+      if (location.protocol === 'file:') {
+        drawHistoryChart(demoData.history);
+        return;
+      }
+
       fetch('/history')
         .then(r => r.json())
         .then(drawHistoryChart)
-        .catch(() => drawHistoryChart({ co2: [] }));
+        .catch(() => drawHistoryChart(demoData.history));
     }
 
     function updateData() {
-      fetch('/data').then(r => r.json()).then(data => {
-        document.getElementById('co2').textContent = data.co2;
-        drawGauge(data.co2);
-      });
+      if (location.protocol === 'file:') {
+        loadPreviewState();
+        return;
+      }
 
-      fetch('/fan/state').then(r => r.json()).then(data => {
-        document.getElementById('fanMode').textContent = data.fan;
-      });
+      fetch('/data')
+        .then(r => r.json())
+        .then(renderSensorData)
+        .catch(() => renderSensorData(demoData));
 
-      fetch('/fan/threshold').then(r => r.json()).then(data => {
-        document.getElementById('threshold').value = data.threshold;
-      });
+      fetch('/fan/state')
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('fanMode').textContent = data.fan;
+        })
+        .catch(() => {
+          document.getElementById('fanMode').textContent = demoData.fan;
+        });
 
-      fetch('/wifi/info').then(r => r.json()).then(data => {
-        document.getElementById('apSsid').textContent = data.ap.ssid || '-';
-        document.getElementById('apIp').textContent = data.ap.ip || '-';
-        document.getElementById('staSsid').textContent = data.station.configuredSsid || '-';
-        document.getElementById('staStatus').textContent = data.station.status || '-';
-        document.getElementById('staIp').textContent = data.station.ip || '0.0.0.0';
-      });
+      fetch('/fan/threshold')
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('threshold').value = data.threshold;
+        })
+        .catch(() => {
+          document.getElementById('threshold').value = demoData.threshold;
+        });
+
+      fetch('/wifi/info')
+        .then(r => r.json())
+        .then(renderWifiInfo)
+        .catch(() => renderWifiInfo(demoData.wifi));
     }
 
     function setFan(state) {
@@ -444,6 +573,7 @@
     updateData();
     updateHistory();
     drawGauge(0);
+    drawTemperatureGauge(0);
   </script>
 </body>
 </html>

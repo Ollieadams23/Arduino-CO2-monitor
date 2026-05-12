@@ -35,6 +35,8 @@ FanMode fanMode = FAN_AUTO;
 bool fanState = false;
 int fanOnThreshold = 1000;
 int lastCO2 = 0;
+float lastTemperature = 0.0f;
+float lastHumidity = 0.0f;
 unsigned long lastSensorRead = 0;
 unsigned long lastHistorySampleAt = 0;
 unsigned long lastSensorRetryAt = 0;
@@ -232,6 +234,9 @@ void sendResponse(WiFiClient &client, const char *contentType, const String &bod
   client.println(statusText);
   client.print("Content-Type: ");
   client.println(contentType);
+  client.println("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+  client.println("Pragma: no-cache");
+  client.println("Expires: 0");
   client.println("Connection: close");
   client.print("Content-Length: ");
   client.println(body.length());
@@ -452,6 +457,20 @@ void sendDashboardHtml(WiFiClient &client) {
       font-weight: 700;
       margin: 10px 0;
     }
+    .gauge-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+    .gauge-panel {
+      text-align: center;
+    }
+    .gauge-reading {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 700;
+      margin: 10px 0 6px;
+    }
     .subtle {
       color: var(--muted);
       font-size: 0.95rem;
@@ -540,8 +559,17 @@ void sendDashboardHtml(WiFiClient &client) {
     <section class="grid">
       <article class="card">
         <h2>Air Quality</h2>
-        <canvas id="co2Gauge" width="260" height="150"></canvas>
-        <div class="reading"><span id="co2">-</span> ppm</div>
+        <div class="gauge-grid">
+          <div class="gauge-panel">
+            <canvas id="co2Gauge" width="260" height="150"></canvas>
+            <div class="reading"><span id="co2">-</span> ppm</div>
+          </div>
+          <div class="gauge-panel">
+            <canvas id="temperatureGauge" width="260" height="150"></canvas>
+            <div class="gauge-reading"><span id="temperature">-</span> C</div>
+            <div class="subtle">Humidity: <strong id="humidity">-</strong> %</div>
+          </div>
+        </div>
       </article>
       <article class="card wide">
         <h2>24 Hour CO2 Trend</h2>
@@ -628,6 +656,54 @@ void sendDashboardHtml(WiFiClient &client) {
       ctx.textAlign = 'center';
       ctx.fillText('0', 38, 136);
       ctx.fillText('2000', 222, 136);
+    }
+
+    function drawTemperatureGauge(value) {
+      const safeValue = Math.max(0, Math.min(40, Number(value) || 0));
+      const canvas = document.getElementById('temperatureGauge');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.beginPath();
+      ctx.arc(130, 130, 90, Math.PI, 0, false);
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = '#d9e4ea';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(130, 130, 90, Math.PI, Math.PI + (safeValue / 40) * Math.PI, false);
+      ctx.lineWidth = 20;
+      if (safeValue < 16) {
+        ctx.strokeStyle = '#3b82f6';
+      } else if (safeValue < 27) {
+        ctx.strokeStyle = '#0f7b6c';
+      } else {
+        ctx.strokeStyle = '#d26a3f';
+      }
+      ctx.stroke();
+
+      const angle = Math.PI + (safeValue / 40) * Math.PI + (Math.PI / 2);
+      ctx.save();
+      ctx.translate(130, 130);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -72);
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#163142';
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.arc(130, 130, 10, 0, Math.PI * 2);
+      ctx.fillStyle = '#163142';
+      ctx.fill();
+
+      ctx.fillStyle = '#4d6574';
+      ctx.font = '14px Trebuchet MS';
+      ctx.textAlign = 'center';
+      ctx.fillText('0', 38, 136);
+      ctx.fillText('40', 222, 136);
     }
 
     function drawHistoryChart(history) {
@@ -732,7 +808,10 @@ void sendDashboardHtml(WiFiClient &client) {
     function updateData() {
       fetch('/data').then(r => r.json()).then(data => {
         document.getElementById('co2').textContent = data.co2;
+        document.getElementById('temperature').textContent = Number(data.temperature || 0).toFixed(1);
+        document.getElementById('humidity').textContent = Number(data.humidity || 0).toFixed(1);
         drawGauge(data.co2);
+        drawTemperatureGauge(data.temperature);
       });
 
       fetch('/fan/state').then(r => r.json()).then(data => {
@@ -819,6 +898,7 @@ void sendDashboardHtml(WiFiClient &client) {
     updateData();
     updateHistory();
     drawGauge(0);
+    drawTemperatureGauge(0);
   </script>
 </body>
 </html>
@@ -937,7 +1017,7 @@ void handleWebClient() {
   } else if (method == "GET" && path == "/history") {
     sendResponse(client, "application/json", buildHistoryJson());
   } else if (method == "GET" && path == "/data") {
-    sendResponse(client, "application/json", "{\"co2\":" + String(lastCO2) + "}");
+    sendResponse(client, "application/json", "{\"co2\":" + String(lastCO2) + ",\"temperature\":" + String(lastTemperature, 1) + ",\"humidity\":" + String(lastHumidity, 1) + "}");
   } else if (method == "GET" && path == "/fan/state") {
     sendResponse(client, "application/json", String("{\"fan\":\"") + (fanMode == FAN_MANUAL_ON ? "on" : "auto") + "\"}");
   } else if (method == "GET" && path == "/fan/threshold") {
@@ -1020,6 +1100,8 @@ void loop() {
       lastSensorError = sensor.readMeasurement(co2, temperature, humidity);
       if (lastSensorError == 0) {
         lastCO2 = co2;
+        lastTemperature = temperature;
+        lastHumidity = humidity;
 
         if (lastHistorySampleAt == 0 || millis() - lastHistorySampleAt >= HISTORY_SAMPLE_INTERVAL_MS) {
           addHistorySample(lastCO2);
