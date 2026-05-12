@@ -28,7 +28,6 @@ WiFiServer webServer(80);
 
 BLEService co2Service("180A");
 BLEIntCharacteristic co2Char("2A6E", BLERead | BLENotify);
-BLEIntCharacteristic tvocChar("2A6F", BLERead | BLENotify);
 
 enum FanMode { FAN_AUTO, FAN_MANUAL_ON };
 
@@ -36,7 +35,6 @@ FanMode fanMode = FAN_AUTO;
 bool fanState = false;
 int fanOnThreshold = 1000;
 int lastCO2 = 0;
-int lastTVOC = 0;
 unsigned long lastSensorRead = 0;
 unsigned long lastHistorySampleAt = 0;
 unsigned long lastSensorRetryAt = 0;
@@ -544,7 +542,6 @@ void sendDashboardHtml(WiFiClient &client) {
         <h2>Air Quality</h2>
         <canvas id="co2Gauge" width="260" height="150"></canvas>
         <div class="reading"><span id="co2">-</span> ppm</div>
-        <div class="subtle">TVOC: <strong id="tvoc">-</strong> ppb</div>
       </article>
       <article class="card wide">
         <h2>24 Hour CO2 Trend</h2>
@@ -735,7 +732,6 @@ void sendDashboardHtml(WiFiClient &client) {
     function updateData() {
       fetch('/data').then(r => r.json()).then(data => {
         document.getElementById('co2').textContent = data.co2;
-        document.getElementById('tvoc').textContent = data.tvoc;
         drawGauge(data.co2);
       });
 
@@ -941,7 +937,7 @@ void handleWebClient() {
   } else if (method == "GET" && path == "/history") {
     sendResponse(client, "application/json", buildHistoryJson());
   } else if (method == "GET" && path == "/data") {
-    sendResponse(client, "application/json", "{\"co2\":" + String(lastCO2) + ",\"tvoc\":" + String(lastTVOC) + "}");
+    sendResponse(client, "application/json", "{\"co2\":" + String(lastCO2) + "}");
   } else if (method == "GET" && path == "/fan/state") {
     sendResponse(client, "application/json", String("{\"fan\":\"") + (fanMode == FAN_MANUAL_ON ? "on" : "auto") + "\"}");
   } else if (method == "GET" && path == "/fan/threshold") {
@@ -990,10 +986,8 @@ void setup() {
   BLE.setLocalName("CO2Sensor");
   BLE.setAdvertisedService(co2Service);
   co2Service.addCharacteristic(co2Char);
-  co2Service.addCharacteristic(tvocChar);
   BLE.addService(co2Service);
   co2Char.writeValue(0);
-  tvocChar.writeValue(0);
   BLE.advertise();
 
   startAccessPoint();
@@ -1026,7 +1020,6 @@ void loop() {
       lastSensorError = sensor.readMeasurement(co2, temperature, humidity);
       if (lastSensorError == 0) {
         lastCO2 = co2;
-        lastTVOC = 0;
 
         if (lastHistorySampleAt == 0 || millis() - lastHistorySampleAt >= HISTORY_SAMPLE_INTERVAL_MS) {
           addHistorySample(lastCO2);
@@ -1034,7 +1027,6 @@ void loop() {
         }
 
         co2Char.writeValue(lastCO2);
-        tvocChar.writeValue(lastTVOC);
 
         if (fanMode == FAN_MANUAL_ON) {
           fanState = true;

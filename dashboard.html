@@ -169,7 +169,6 @@
         <h2>Air Quality</h2>
         <canvas id="co2Gauge" width="260" height="150"></canvas>
         <div class="reading"><span id="co2">-</span> ppm</div>
-        <div class="subtle">TVOC: <strong id="tvoc">-</strong> ppb</div>
       </article>
       <article class="card wide">
         <h2>24 Hour CO2 Trend</h2>
@@ -360,7 +359,6 @@
     function updateData() {
       fetch('/data').then(r => r.json()).then(data => {
         document.getElementById('co2').textContent = data.co2;
-        document.getElementById('tvoc').textContent = data.tvoc;
         drawGauge(data.co2);
       });
 
