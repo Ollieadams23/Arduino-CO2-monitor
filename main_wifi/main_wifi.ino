@@ -1093,7 +1093,11 @@ void setup() {
   co2Char.writeValue(0);
   BLE.advertise();
 
-  startAccessPoint();
+  // Try to connect to saved WiFi credentials
+  if (!connectToConfiguredWifi()) {
+    Serial.println("Failed to connect to saved WiFi, starting AP mode.");
+    startAccessPoint();
+  }
   webServer.begin();
 
   Wire.begin();
