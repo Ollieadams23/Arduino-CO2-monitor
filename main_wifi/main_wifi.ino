@@ -640,7 +640,7 @@ void sendDashboardHtml(WiFiClient &client) {
   </main>
   <script>
     function drawGauge(value) {
-      const safeValue = Math.max(0, Math.min(2000, Number(value) || 0));
+      const safeValue = Math.max(0, Math.min(4000, Number(value) || 0));
       const canvas = document.getElementById('co2Gauge');
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -652,12 +652,12 @@ void sendDashboardHtml(WiFiClient &client) {
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(130, 130, 90, Math.PI, Math.PI + (safeValue / 2000) * Math.PI, false);
+      ctx.arc(130, 130, 90, Math.PI, Math.PI + (safeValue / 4000) * Math.PI, false);
       ctx.lineWidth = 20;
       ctx.strokeStyle = safeValue >= 1000 ? '#b64242' : '#0f7b6c';
       ctx.stroke();
 
-      const angle = Math.PI + (safeValue / 2000) * Math.PI + (Math.PI / 2);
+      const angle = Math.PI + (safeValue / 4000) * Math.PI + (Math.PI / 2);
       ctx.save();
       ctx.translate(130, 130);
       ctx.rotate(angle);
@@ -678,7 +678,7 @@ void sendDashboardHtml(WiFiClient &client) {
       ctx.font = '14px Trebuchet MS';
       ctx.textAlign = 'center';
       ctx.fillText('0', 38, 136);
-      ctx.fillText('2000', 222, 136);
+      ctx.fillText('4000', 222, 136);
     }
 
     function drawTemperatureGauge(value) {
